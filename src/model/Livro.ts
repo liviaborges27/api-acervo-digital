@@ -179,14 +179,14 @@ class Livro {
     /**
      * Retorna as informações de um livro informado pelo ID
      * 
-     * @param idLivro Identificador único do livro
+     * @param id_livro Identificador único do livro
      * @returns Objeto com informações do livro
      */
-    static async listarLivro(idLivro: number): Promise<LivroDTO | null> {
+    static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
         try {
-            const querySelectLivro = `SELECT * FROM livro WHERE id_livro = ${idLivro}`;
+            const querySelectLivro = `SELECT * FROM livro WHERE id_livro = $1`;
 
-            const respostaBD = await database.query(querySelectLivro);
+            const respostaBD = await database.query(querySelectLivro, [id_livro]);
 
             const livroDTO: LivroDTO = {
                 id_livro: respostaBD.rows[0].id_livro,
@@ -220,21 +220,22 @@ class Livro {
             // Cria a consulta (query) para inserir livro na tabela retornado o ID do livro
             const queryInsertLivro = `
                 INSERT INTO Livro (titulo, autor, editora, ano_publicacao, isbn, quant_total, quant_disponivel, valor_aquisicao, status_livro_emprestado)
-                VALUES (
-                    '${livro.getTitulo().toUpperCase()}',
-                    '${livro.getAutor().toUpperCase()}',
-                    '${livro.getEditora().toUpperCase()}',
-                    '${livro.getAnoPublicacao().toUpperCase()}',
-                    '${livro.getIsbn().toUpperCase()}',
-                    '${livro.getQuantTotal()}',
-                    '${livro.getQuantDisponivel()}',
-                    '${livro.getValorAquisicao()}',
-                    '${livro.getStatusLivroEmprestado().toUpperCase()}'
-                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING id_livro;`;
 
-            // executa a consulta no banco e armazena o resultado
-            const result = await database.query(queryInsertLivro);
+            const valores = [
+                livro.getTitulo().toUpperCase(),
+                livro.getAutor().toUpperCase(),
+                livro.getEditora().toUpperCase(),
+                livro.getAnoPublicacao().toUpperCase(),
+                livro.getIsbn().toUpperCase(),
+                livro.getQuantTotal(),
+                livro.getQuantDisponivel(),
+                livro.getValorAquisicao(),
+                livro.getStatusLivroEmprestado().toUpperCase()
+            ];
+
+            const result = await database.query(queryInsertLivro, valores);
 
             // verifica se o número de linhas alteradas no banco de dados é maior que 0
             if (result.rows.length > 0) {
@@ -264,19 +265,16 @@ class Livro {
             if (livro && livro.status_livro) {
                 // Cria a consulta para rmeover empréstimo do banco de dados
                 const queryDeleteEmprestimoLivro = `UPDATE emprestimo
-                                                    SET status_emprestimo_registro = FALSE 
-                                                    WHERE id_livro=${id_livro}`;
+                                    SET status_emprestimo_registro = FALSE 
+                                    WHERE id_livro = $1`;
 
-                // executa a query para remover empréstimo
-                await database.query(queryDeleteEmprestimoLivro);
+                await database.query(queryDeleteEmprestimoLivro, [id_livro]);
 
-                // Construção da query SQL para deletar o Livro.
                 const queryDeleteLivro = `UPDATE livro
-                                        SET status_livro = FALSE 
-                                        WHERE id_livro=${id_livro};`;
+                          SET status_livro = FALSE 
+                          WHERE id_livro = $1`;
 
-                // Executa a query de exclusão e verifica se a operação foi bem-sucedida.
-                const result = await database.query(queryDeleteLivro);
+                const result = await database.query(queryDeleteLivro, [id_livro]);
 
                 return result.rowCount != 0;
             }
@@ -302,21 +300,33 @@ class Livro {
             if (livroConsulta && livroConsulta.status_livro) {
                 // Construção da query SQL para atualizar os dados do livro no banco de dados.
                 const queryAtualizarLivro = `UPDATE Livro SET 
-                                            titulo = '${livro.getTitulo().toUpperCase()}', 
-                                            autor = '${livro.getAutor().toUpperCase()}',
-                                            editora = '${livro.getEditora().toUpperCase()}', 
-                                            ano_publicacao = '${livro.getAnoPublicacao().toUpperCase()}',
-                                            isbn = '${livro.getIsbn().toUpperCase()}', 
-                                            quant_total = ${livro.getQuantTotal()},
-                                            quant_disponivel = ${livro.getQuantDisponivel()},
-                                            valor_aquisicao = ${livro.getValorAquisicao()},
-                                            status_livro_emprestado = '${livro.getStatusLivroEmprestado().toUpperCase()}'                                           
-                                        WHERE id_livro = ${livro.id_livro}`;
+                                titulo = $1, 
+                                autor = $2,
+                                editora = $3, 
+                                ano_publicacao = $4,
+                                isbn = $5, 
+                                quant_total = $6,
+                                quant_disponivel = $7,
+                                valor_aquisicao = $8,
+                                status_livro_emprestado = $9
+                             WHERE id_livro = $10`;
 
-                // Executa a query de atualização e verifica se a operação foi bem-sucedida.
-                const respostaBD = await database.query(queryAtualizarLivro);
+                const valores = [
+                    livro.getTitulo().toUpperCase(),
+                    livro.getAutor().toUpperCase(),
+                    livro.getEditora().toUpperCase(),
+                    livro.getAnoPublicacao().toUpperCase(),
+                    livro.getIsbn().toUpperCase(),
+                    livro.getQuantTotal(),
+                    livro.getQuantDisponivel(),
+                    livro.getValorAquisicao(),
+                    livro.getStatusLivroEmprestado().toUpperCase(),
+                    livro.id_livro
+                ];
 
-                if(respostaBD.rowCount != 0) {
+                const respostaBD = await database.query(queryAtualizarLivro, valores);
+
+                if (respostaBD.rowCount != 0) {
                     return true;
                 }
             }
