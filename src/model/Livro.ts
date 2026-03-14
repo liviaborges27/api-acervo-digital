@@ -1,3 +1,8 @@
+import type LivroDTO from "../dto/LivroDTO.js";
+import { DatabaseModel } from "./DatabaseModel.js";
+
+const database = new DatabaseModel().pool;
+
 class Livro {
     private id_livro: number = 0;
     private titulo: string;
@@ -120,7 +125,57 @@ class Livro {
     public setStatusLivro(value: boolean) {
         this.status_livro = value;
     }
-    
+ 
+    /**
+     * Retorna uma lista com todos os livros cadastrados no banco de dados
+     * 
+     * @returns Lista com todos os livros cadastrados no banco de dados
+     */
+    static async listarLivros(): Promise<Array<LivroDTO> | null> {
+        // Criando lista vazia para armazenar os livros
+        let listaDeLivros: Array<LivroDTO> = [];
+
+        try {
+            // Query para consulta no banco de dados
+            const querySelectLivro = `SELECT * FROM Livro WHERE status_livro = TRUE;`;
+
+            // executa a query no banco de dados
+            const respostaBD = await database.query(querySelectLivro);
+
+            // percorre cada resultado retornado pelo banco de dados
+            // livro é o apelido que demos para cada linha retornada do banco de dados
+            respostaBD.rows.forEach((livro) => {
+                // criando objeto livro
+                const livroDTO: LivroDTO = {
+                    id_livro: livro.id_livro,
+                    titulo: livro.titulo,
+                    autor: livro.autor,
+                    editora: livro.editora,
+                    ano_publicacao: livro.ano_publicacao,
+                    isbn: livro.isbn,
+                    quant_total: livro.quant_total,
+                    quant_disponivel: livro.quant_disponivel,
+                    quant_aquisicao: livro.quant_aquisicao,
+                    valor_aquisicao: livro.valor_aquisicao,
+                    status_livro_emprestado: livro.status_livro_emprestado,
+                    status_livro: livro.status_livro
+                };
+
+                listaDeLivros.push(livroDTO);
+            });
+
+            // retornado a lista de livros para quem chamou a função
+            return listaDeLivros;
+
+            // captura qualquer erro que aconteça
+        } catch (error) {
+            // exibe detalhes do erro no console
+            console.log(`Erro ao acessar o modelo: ${error}`);
+            // retorna um valor nulo
+            return null;
+        }
+    }
+
 }
 
 export default Livro;
