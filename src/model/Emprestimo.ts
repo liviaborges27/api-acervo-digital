@@ -24,6 +24,55 @@ class Emprestimo {
         this.status_emprestimo = _status_emprestimo ?? "Em Andamento";
         this.data_devolucao = _data_devolucao ?? dataDevolucaoPadrao;
     }
+
+    public getIdEmprestimo(): number {
+        return this.id_emprestimo;
+    }
+    public setIdEmprestimo(value: number) {
+        this.id_emprestimo = value;
+    }
+
+    public getIdAluno(): number {
+        return this.id_aluno;
+    }
+    public setIdAluno(value: number) {
+        this.id_aluno = value;
+    }
+
+    public getIdLivro(): number {
+        return this.id_livro;
+    }
+    public setIdLivro(value: number) {
+        this.id_livro = value;
+    }
+
+    public getDataEmprestimo(): Date {
+        return this.data_emprestimo;
+    }
+    public setDataEmprestimo(value: Date) {
+        this.data_emprestimo = value;
+    }
+
+    public getDataDevolucao(): Date {
+        return this.data_devolucao;
+    }
+    public setDataDevolucao(value: Date) {
+        this.data_devolucao = value;
+    }
+
+    public getStatusEmprestimo(): string {
+        return this.status_emprestimo;
+    }
+    public setStatusEmprestimo(value: string) {
+        this.status_emprestimo = value;
+    }
+
+    public getStatusEmprestimoRegistro(): boolean {
+        return this.status_emprestimo_registro;
+    }
+    public setStatusEmprestimoRegistro(value: boolean) {
+        this.status_emprestimo_registro = value;
+    }
 }
 
 export default Emprestimo;
