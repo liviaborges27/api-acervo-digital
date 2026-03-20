@@ -434,43 +434,84 @@ static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
     */
     // Realiza uma remoção lógica: não apaga o registro, apenas muda o status para FALSE
     static async removerLivro(id_livro: number): Promise<boolean> {
-        try {
-            // Busca o livro no banco antes de tentar remover, para verificar se ele existe e está ativo
-            const livro: LivroDTO | null = await this.listarLivro(id_livro);
-
-            // Só prossegue se o livro existir (não for null) E estiver com status ativo (true)
-            if (livro && livro.status_livro) {
-                // Primeiro desativa todos os empréstimos relacionados a este livro
-                // Isso garante a consistência dos dados — um livro removido não pode ter empréstimos ativos
-                const queryDeleteEmprestimoLivro = `UPDATE emprestimo
-                                    SET status_emprestimo_registro = FALSE 
-                                    WHERE id_livro = $1`;
-
-                // Executa a desativação dos empréstimos do livro (não precisa verificar o resultado aqui)
-                await database.query(queryDeleteEmprestimoLivro, [id_livro]);
-
-                // Agora desativa o próprio livro (remoção lógica — não apaga, apenas muda o status)
-                const queryDeleteLivro = `UPDATE livro
-                          SET status_livro = FALSE 
-                          WHERE id_livro = $1`;
-
-                // Executa a desativação do livro e armazena o resultado
-                const result = await database.query(queryDeleteLivro, [id_livro]);
-
-                // "rowCount" indica quantas linhas foram afetadas pelo UPDATE
-                // Retorna true se pelo menos uma linha foi alterada, false caso contrário
-                return result.rowCount != 0;
-            }
-
-            // Se o livro não existir ou já estiver inativo, retorna false
-            return false;
-        } catch (error) {
-            // Exibe o erro no console e retorna false em caso de falha
-            console.log(`Erro na consulta: ${error}`);
+    try {
+        // ✅ MELHORIA 1 — Validação de entrada antes de qualquer operação
+        // Se o ID recebido não for um número válido, rejeitamos imediatamente.
+        // Isso evita uma consulta desnecessária ao banco com um valor inútil.
+        if (!id_livro || isNaN(id_livro)) {
+            console.warn(`[LivroModel] Remoção rejeitada: ID inválido recebido (${id_livro})`);
             return false;
         }
-    }
 
+        // Busca o livro no banco antes de tentar remover, para verificar se ele existe e está ativo.
+        // Reutilizamos o método listarLivro() já existente — sem duplicar a query de SELECT.
+        const livro: LivroDTO | null = await LivroModel.listarLivro(id_livro);
+
+        // Se o livro não existir ou já estiver inativo, não há nada a remover
+        if (!livro || !livro.status_livro) {
+            console.warn(`[LivroModel] Remoção ignorada: livro ID ${id_livro} não encontrado ou já inativo.`);
+            return false;
+        }
+
+        // ✅ MELHORIA 2 — Uso de transação para garantir consistência dos dados
+        // Os dois UPDATEs (empréstimos + livro) precisam acontecer juntos ou não acontecer.
+        // Sem transação, se o segundo UPDATE falhar, os empréstimos já teriam sido desativados,
+        // deixando o banco em estado inconsistente.
+        //
+        // BEGIN    → inicia a transação (agrupa as operações)
+        // COMMIT   → confirma todas as operações se tudo correu bem
+        // ROLLBACK → desfaz tudo se algo falhar (feito automaticamente no catch)
+        await database.query('BEGIN');
+
+        // Desativa todos os empréstimos vinculados a este livro.
+        // Um livro removido não pode manter empréstimos ativos no sistema.
+        const queryDesativarEmprestimos = `
+            UPDATE emprestimo
+               SET status_emprestimo_registro = FALSE
+             WHERE id_livro = $1;
+        `;
+        await database.query(queryDesativarEmprestimos, [id_livro]);
+
+        // Desativa o próprio livro (remoção lógica).
+        // O registro permanece no banco para preservar histórico — apenas o status muda.
+        const queryDesativarLivro = `
+            UPDATE livro
+               SET status_livro = FALSE
+             WHERE id_livro = $1;
+        `;
+        const resultado = await database.query(queryDesativarLivro, [id_livro]);
+
+        // Confirma a transação — ambos os UPDATEs foram executados com sucesso
+        await database.query('COMMIT');
+
+        // ✅ MELHORIA 3 — Comparação estrita === ao invés de !=
+        // O operador != faz coerção de tipo (ex: "0" != 0 é false), o que pode
+        // gerar comportamentos inesperados. O === / !== compara valor E tipo,
+        // sendo mais seguro e explícito.
+        //
+        // rowCount retorna o número de linhas afetadas pelo UPDATE.
+        // Se for maior que 0, o livro foi desativado com sucesso.
+        const foiRemovido = (resultado.rowCount ?? 0) > 0;
+
+        if (foiRemovido) {
+            console.log(`[LivroModel] Livro ID ${id_livro} removido com sucesso.`);
+        } else {
+            console.warn(`[LivroModel] UPDATE executado, mas nenhuma linha foi afetada para o ID ${id_livro}.`);
+        }
+
+        return foiRemovido;
+
+    } catch (error) {
+        // ✅ MELHORIA 4 — ROLLBACK no catch para desfazer operações parciais
+        // Se qualquer erro ocorrer após o BEGIN, precisamos desfazer as operações
+        // já executadas dentro da transação para não deixar o banco inconsistente.
+        await database.query('ROLLBACK');
+
+        // console.error ao invés de console.log — erros devem ir para stderr
+        console.error(`[LivroModel] Erro ao remover livro ID ${id_livro}: ${error}`);
+        return false;
+    }
+}
     /**
      * Atualiza os dados de um livro no banco de dados.
      * @param livro Objeto do tipo Livro com os novos dados
