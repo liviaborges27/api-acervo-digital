@@ -384,55 +384,62 @@ static async removerAluno(id_aluno: number): Promise<boolean> {
 }
 
     /**
-    * Atualiza os dados de um aluno no banco de dados.
-    * @param aluno Objeto do tipo Aluno com os novos dados
-    * @returns true caso sucesso, false caso erro
-    */
-    // Recebe um objeto Aluno com os dados atualizados e os salva no banco
-    static async atualizarAluno(aluno: Aluno): Promise<boolean> {
-        try {
-            // Antes de atualizar, verifica se o aluno existe e está ativo no banco
-            const alunoConsulta: AlunoDTO | null = await this.listarAluno(aluno.id_aluno);
+ * Atualiza os dados de um aluno ativo no banco de dados.
+ *
+ * @param aluno - Objeto Aluno com os dados atualizados (deve conter id_aluno)
+ * @returns true se a atualização foi realizada com sucesso, false caso contrário
+ */
+static async atualizarAluno(aluno: Aluno): Promise<boolean> {
+    try {
+        // Verifica se o aluno existe e está ativo antes de tentar atualizar
+        // listarAluno já filtra por status_aluno = TRUE, então null = inexistente ou inativo
+        const alunoExistente: AlunoDTO | null = await this.listarAluno(aluno.id_aluno);
 
-            // Só prossegue com a atualização se o aluno existir e estiver ativo
-            if (alunoConsulta && alunoConsulta.status_aluno) {
-                // Query SQL de atualização — cada campo recebe um placeholder "$n"
-                // O WHERE garante que só o aluno com o ID correto seja atualizado
-                const queryAtualizarAluno = `UPDATE Aluno SET 
-                                                    nome = '$1', 
-                                                    sobrenome = '$2',
-                                                    data_nascimento = '$3', 
-                                                    endereco = '$4',
-                                                    celular = '$5', 
-                                                    email = '$6'                                            
-                                                WHERE id_aluno = $7`;
+        // Se o aluno não foi encontrado ou está inativo, encerra sem alterações
+        if (!alunoExistente) return false;
 
-                // Executa a query de atualização com os valores do objeto aluno recebido
-                const respostaBD = await database.query(queryAtualizarAluno, [
-                    aluno.getNome().toUpperCase(),       // Nome em maiúsculas
-                    aluno.getSobrenome().toUpperCase(),  // Sobrenome em maiúsculas
-                    aluno.getDataNascimento(),           // Data de nascimento
-                    aluno.getEndereco().toUpperCase(),   // Endereço em maiúsculas
-                    aluno.getCelular(),                  // Celular
-                    aluno.getEmail().toLowerCase(),      // E-mail em minúsculas
-                    aluno.id_aluno                       // ID do aluno (para o WHERE)
-                ]);
+        // Normaliza os dados antes de enviar ao banco (mesmo padrão de cadastrarAluno):
+        // nomes e endereço em maiúsculas, e-mail em minúsculas, trim remove espaços extras
+        const nome           = aluno.getNome().toUpperCase().trim();
+        const sobrenome      = aluno.getSobrenome().toUpperCase().trim();
+        const dataNascimento = aluno.getDataNascimento();
+        const endereco       = aluno.getEndereco().toUpperCase().trim();
+        const celular        = aluno.getCelular();
+        const email          = aluno.getEmail().toLowerCase().trim();
 
-                // Se rowCount for diferente de 0, a atualização funcionou — retorna true
-                if (respostaBD.rowCount != 0) {
-                    return true;
-                }
-            }
+        // Prepared statement sem aspas nos placeholders — aspas causariam o banco
+        // interpretar '$1' como texto literal em vez de parâmetro (bug crítico)
+        const query = `
+            UPDATE aluno SET
+                nome            = $1,
+                sobrenome       = $2,
+                data_nascimento = $3,
+                endereco        = $4,
+                celular         = $5,
+                email           = $6
+            WHERE id_aluno = $7;
+        `;
 
-            // Se o aluno não existe, está inativo, ou o UPDATE não afetou nenhuma linha, retorna false
-            return false;
-        } catch (error) {
-            // Exibe o erro no console e retorna false em caso de exceção
-            console.log(`Erro na consulta: ${error}`);
-            return false;
-        }
+        // Executa o UPDATE com os valores normalizados
+        const { rowCount } = await database.query(query, [
+            nome,
+            sobrenome,
+            dataNascimento,
+            endereco,
+            celular,
+            email,
+            aluno.id_aluno
+        ]);
+
+        // rowCount > 0 confirma que ao menos uma linha foi afetada pelo UPDATE
+        // ?? 0 trata o caso em que rowCount é null (comportamento possível em alguns drivers)
+        return (rowCount ?? 0) > 0;
+
+    } catch (error) {
+        console.error("Erro ao atualizar aluno:", error);
+        return false;
     }
-
+}
 }
 
 // Exporta a classe Aluno para que possa ser importada e usada em outros arquivos do projeto
