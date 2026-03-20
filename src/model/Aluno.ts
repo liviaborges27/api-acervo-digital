@@ -332,50 +332,56 @@ static async cadastrarAluno(aluno: Aluno): Promise<boolean> {
     }
 }
 
-    /**
-    * Remove um aluno do banco de dados
-    * @param id_aluno ID do aluno a ser removido
-    * @returns Boolean indicando se a remoção foi bem-sucedida
-   */
-    // Recebe o ID do aluno e realiza uma "remoção lógica" (não apaga do banco, apenas desativa)
-    static async removerAluno(id_aluno: number): Promise<boolean> {
-        try {
-            // Busca o aluno no banco antes de tentar remover, para verificar se ele existe e está ativo
-            const aluno: AlunoDTO | null = await this.listarAluno(id_aluno);
+   /**
+ * Realiza a remoção lógica de um aluno e seus empréstimos vinculados.
+ * Não apaga os registros do banco — apenas desativa via status = FALSE.
+ *
+ * @param id_aluno - ID do aluno a ser desativado
+ * @returns true se a remoção foi realizada com sucesso, false caso contrário
+ */
+static async removerAluno(id_aluno: number): Promise<boolean> {
+    try {
+        // Verifica se o aluno existe e está ativo antes de prosseguir
+        // listarAluno já filtra por status_aluno = TRUE, então null = inexistente ou inativo
+        const aluno: AlunoDTO | null = await this.listarAluno(id_aluno);
 
-            // Só prossegue se o aluno existir (não for null) E estiver com status ativo (true)
-            if (aluno && aluno.status_aluno) {
-                // Query que desativa todos os empréstimos relacionados ao aluno
-                // Em vez de apagar, usa UPDATE para setar o status como FALSE (remoção lógica)
-                const queryDeleteEmprestimoAluno = `UPDATE emprestimo 
-                                                    SET status_emprestimo_registro = FALSE
-                                                    WHERE id_aluno=$1;`;
+        // Se o aluno não foi encontrado ou já está inativo, encerra sem alterações
+        if (!aluno) return false;
 
-                // Executa a desativação dos empréstimos do aluno
-                await database.query(queryDeleteEmprestimoAluno, [id_aluno]);
+        // Desativa os empréstimos e o aluno em uma única transação:
+        // TRANSACTION garante que as duas operações acontecem juntas ou não acontecem nenhuma.
+        // Se uma falhar, a outra é desfeita automaticamente (rollback) — mantendo o banco consistente.
+        await database.query(`BEGIN`);
 
-                // Query que desativa o próprio aluno (também uma remoção lógica)
-                const queryDeleteAluno = `UPDATE aluno 
-                                        SET status_aluno = FALSE
-                                        WHERE id_aluno=$1;`;
+        // Remoção lógica dos empréstimos vinculados ao aluno
+        await database.query(
+            `UPDATE emprestimo
+             SET status_emprestimo_registro = FALSE
+             WHERE id_aluno = $1;`,
+            [id_aluno]
+        );
 
-                // Executa a desativação do aluno e armazena o resultado
-                const result = await database.query(queryDeleteAluno, [id_aluno]);
+        // Remoção lógica do aluno — rowCount indica quantas linhas foram afetadas
+        const { rowCount } = await database.query(
+            `UPDATE aluno
+             SET status_aluno = FALSE
+             WHERE id_aluno = $1;`,
+            [id_aluno]
+        );
 
-                // "rowCount" indica quantas linhas foram afetadas pelo UPDATE
-                // Se for diferente de 0, significa que o aluno foi desativado com sucesso
-                return true;
-            }
+        // Confirma as duas operações no banco (commit só ocorre se tudo correu bem)
+        await database.query(`COMMIT`);
 
-            // Se o aluno não existir ou já estiver inativo, retorna false
-            return false;
+        // rowCount > 0 confirma que o UPDATE do aluno afetou ao menos uma linha
+        return (rowCount ?? 0) > 0;
 
-        } catch (error) {
-            // Exibe o erro no console e retorna false em caso de falha
-            console.log(`Erro na consulta: ${error}`);
-            return false;
-        }
+    } catch (error) {
+        // Se qualquer operação falhar, desfaz tudo que foi feito na transação
+        await database.query(`ROLLBACK`);
+        console.error("Erro ao remover aluno:", error);
+        return false;
     }
+}
 
     /**
     * Atualiza os dados de um aluno no banco de dados.
