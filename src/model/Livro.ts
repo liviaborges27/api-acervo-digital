@@ -261,41 +261,89 @@ static async listarLivros(): Promise<Array<LivroDTO> | null> {
      * @returns Objeto com informações do livro
      */
     // Recebe o ID do livro e retorna um único LivroDTO ou null
-    static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
-        try {
-            // Query SQL que busca um livro específico pelo ID
-            // O "$1" é um placeholder substituído pelo valor real (proteção contra SQL Injection)
-            const querySelectLivro = `SELECT * FROM livro WHERE id_livro = $1`;
+    /**
+ * Busca um livro específico pelo seu ID no banco de dados.
+ *
+ * @param id_livro - ID numérico do livro a ser buscado
+ * @returns Promise com LivroDTO em caso de sucesso, ou null se não encontrado / erro
+ *
+ * Boas práticas aplicadas:
+ * - Colunas explícitas ao invés de SELECT *
+ * - Verificação de existência antes de acessar rows[0]
+ * - Desestruturação para eliminar repetição de código
+ * - Log de erro estruturado com prefixo de contexto
+ */
+static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
+    try {
+        // ✅ MELHORIA 1 — Colunas explícitas ao invés de SELECT *
+        // Selecionar apenas as colunas necessárias evita tráfego desnecessário de dados
+        // entre o banco e a aplicação, e protege contra quebras quando o schema é alterado.
+        // O "$1" é um placeholder que o banco substitui pelo valor real — isso impede SQL Injection.
+        const querySelectLivro = `
+            SELECT
+                id_livro,
+                titulo,
+                autor,
+                editora,
+                ano_publicacao,
+                isbn,
+                quant_total,
+                quant_disponivel,
+                quant_aquisicao,
+                valor_aquisicao,
+                status_livro_emprestado,
+                status_livro
+            FROM livro
+            WHERE id_livro = $1
+              AND status_livro = TRUE;
+        `;
 
-            // Executa a query passando o id_livro como parâmetro (substitui o $1)
-            const respostaBD = await database.query(querySelectLivro, [id_livro]);
+        // Executa a query passando o id_livro como parâmetro (substitui o $1)
+        const respostaBD = await database.query(querySelectLivro, [id_livro]);
 
-            // Monta o objeto LivroDTO com os dados da primeira (e única) linha retornada
-            // rows[0] acessa o primeiro elemento do array de resultados
-            const livroDTO: LivroDTO = {
-                id_livro: respostaBD.rows[0].id_livro,
-                titulo: respostaBD.rows[0].titulo,
-                autor: respostaBD.rows[0].autor,
-                editora: respostaBD.rows[0].editora,
-                ano_publicacao: respostaBD.rows[0].ano_publicacao,
-                isbn: respostaBD.rows[0].isbn,
-                quant_total: respostaBD.rows[0].quant_total,
-                quant_disponivel: respostaBD.rows[0].quant_disponivel,
-                quant_aquisicao: respostaBD.rows[0].quant_aquisicao,
-                valor_aquisicao: respostaBD.rows[0].valor_aquisicao,
-                status_livro_emprestado: respostaBD.rows[0].status_livro_emprestado,
-                status_livro: respostaBD.rows[0].status_livro
-            };
-
-            // Retorna o objeto LivroDTO preenchido com os dados do banco
-            return livroDTO;
-        } catch (error) {
-            // Exibe o erro no console e retorna null em caso de falha
-            console.error(`Erro ao realizar consulta. ${error}`);
+        // ✅ MELHORIA 2 — Verificação de existência antes de acessar rows[0]
+        // Sem essa checagem, se nenhum livro for encontrado, respostaBD.rows[0] será
+        // undefined — e tentar acessar rows[0].titulo causaria um TypeError em runtime.
+        // Retornar null aqui é a forma correta de sinalizar "livro não encontrado".
+        if (!respostaBD.rows || respostaBD.rows.length === 0) {
             return null;
         }
-    }
 
+        // ✅ MELHORIA 3 — Desestruturação do resultado
+        // Ao invés de repetir respostaBD.rows[0] em cada campo do DTO,
+        // extraímos o registro em uma variável própria.
+        // Isso elimina repetição, reduz chance de erro de digitação e melhora a leitura.
+        const livro = respostaBD.rows[0];
+
+        // Monta o objeto LivroDTO com os dados da linha retornada pelo banco.
+        // LivroDTO é um objeto simples de dados (sem métodos), ideal para
+        // transferir informações entre as camadas da aplicação (Model → Controller → Client).
+        const livroDTO: LivroDTO = {
+            id_livro:                   livro.id_livro,
+            titulo:                     livro.titulo,
+            autor:                      livro.autor,
+            editora:                    livro.editora,
+            ano_publicacao:             livro.ano_publicacao,
+            isbn:                       livro.isbn,
+            quant_total:                livro.quant_total,
+            quant_disponivel:           livro.quant_disponivel,
+            quant_aquisicao:            livro.quant_aquisicao,
+            valor_aquisicao:            livro.valor_aquisicao,
+            status_livro_emprestado:    livro.status_livro_emprestado,
+            status_livro:               livro.status_livro,
+        };
+
+        // Retorna o DTO preenchido com os dados do livro encontrado
+        return livroDTO;
+
+    } catch (error) {
+        // ✅ MELHORIA 4 — Log de erro estruturado com contexto
+        // Adicionar "[LivroModel]" e o ID consultado facilita rastrear a origem do problema
+        // ao analisar logs em produção — especialmente em APIs com múltiplos modelos e rotas.
+        console.error(`[LivroModel] Erro ao buscar livro ID ${id_livro}: ${error}`);
+        return null;
+    }
+}
     /**
      * Cadastra um novo livro no banco de dados
      * @param livro Objeto Livro contendo as informações a serem cadastradas
