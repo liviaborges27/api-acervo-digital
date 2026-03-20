@@ -161,51 +161,53 @@ class Aluno {
      * 
      * @returns Lista com todos os alunos cadastrados no banco de dados
      */
-    // "async" indica que este método é assíncrono — ele pode "esperar" por operações demoradas (como banco de dados)
-    // Retorna uma Promise que, quando resolvida, contém um Array de AlunoDTO ou null
-    static async listarAlunos(): Promise<Array<AlunoDTO> | null> {
-        // Cria uma lista vazia que vai receber os alunos encontrados no banco
-        let listaDeAlunos: Array<AlunoDTO> = [];
+    static async listarAlunos(): Promise<AlunoDTO[]> {
 
         try {
-            // Bloco try: tenta executar o código; se algo der errado, vai para o catch
+            // Seleciona apenas as colunas necessárias — evita buscar dados extras do banco
+            // (ex: colunas internas, logs, timestamps não usados pela aplicação)
+            const query = `
+            SELECT
+                id_aluno,
+                ra,
+                nome,
+                sobrenome,
+                data_nascimento,
+                endereco,
+                email,
+                celular,
+                status_aluno
+            FROM aluno
+            WHERE status_aluno = TRUE;
+        `;
 
-            // Define a query SQL que busca todos os alunos ativos no banco de dados
-            const querySelectAluno = `SELECT * FROM Aluno WHERE status_aluno = TRUE;`;
+            // Executa a consulta e aguarda a resposta do banco de dados
+            const { rows } = await database.query(query);
 
-            // Executa a query no banco de dados e aguarda o resultado
-            // "await" pausa a execução aqui até o banco responder
-            const respostaBD = await database.query(querySelectAluno);
+            // .map() transforma cada linha retornada em um objeto AlunoDTO
+            // É preferível ao forEach+push por ser mais declarativo e criar o array diretamente
+            const listaDeAlunos: AlunoDTO[] = rows.map((aluno: any) => ({
+                id_aluno: aluno.id_aluno as number,
+                ra: aluno.ra as string,
+                nome: aluno.nome as string,
+                sobrenome: aluno.sobrenome as string,
+                data_nascimento: aluno.data_nascimento as Date,
+                endereco: aluno.endereco as string,
+                email: aluno.email as string,
+                celular: aluno.celular as string,
+                status_aluno: aluno.status_aluno as boolean
+            } as AlunoDTO));
 
-            // Percorre cada linha retornada pelo banco de dados
-            // "aluno" é o apelido dado a cada linha individual retornada
-            respostaBD.rows.forEach((aluno: any) => {
-
-                // Cria um objeto AlunoDTO com os dados de cada linha do banco
-                // AlunoDTO é apenas um objeto simples de dados (sem métodos), diferente da classe Aluno
-                const alunoDTO: AlunoDTO = {
-                    id_aluno: aluno.id_aluno,               // ID do aluno
-                    ra: aluno.ra,                           // Registro Acadêmico
-                    nome: aluno.nome,                       // Nome
-                    sobrenome: aluno.sobrenome,             // Sobrenome
-                    data_nascimento: aluno.data_nascimento, // Data de nascimento
-                    endereco: aluno.endereco,               // Endereço
-                    email: aluno.email,                     // E-mail
-                    celular: aluno.celular,                 // Celular
-                    status_aluno: aluno.status_aluno        // Status ativo/inativo
-                };
-
-                // Adiciona o objeto AlunoDTO à lista
-                listaDeAlunos.push(alunoDTO);
-            });
-
-            // Retorna a lista com todos os alunos encontrados
             return listaDeAlunos;
+
         } catch (error) {
-            // Se ocorrer qualquer erro durante a consulta, exibe no console para facilitar o debug
-            console.log(`Erro ao acessar o modelo: ${error}`);
-            // Retorna null para indicar que houve falha
-            return null;
+            // console.error é semanticamente correto para erros (diferente de console.log)
+            // Registra a mensagem e o objeto de erro separados para melhor leitura no terminal
+            console.error("Erro ao listar alunos:", error);
+
+            // Retorna array vazio em vez de null:
+            // o chamador pode usar .length ou iterar diretamente sem verificar null primeiro
+            return [];
         }
     }
 
