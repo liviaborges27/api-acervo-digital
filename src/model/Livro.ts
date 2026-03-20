@@ -351,48 +351,81 @@ static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
      */
     // Recebe um objeto Livro completo e tenta inseri-lo no banco de dados
     static async cadastrarLivro(livro: Livro): Promise<boolean> {
-        try {
-            // Query SQL de inserção com 9 placeholders ($1 a $9), um para cada campo
-            // "RETURNING id_livro" faz o banco retornar o ID gerado automaticamente após o INSERT
-            const queryInsertLivro = `
-                INSERT INTO Livro (titulo, autor, editora, ano_publicacao, isbn, quant_total, quant_disponivel, valor_aquisicao, status_livro_emprestado)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                RETURNING id_livro;`;
-
-            // Organiza os valores em um array na mesma ordem dos placeholders da query
-            // Textos são convertidos para maiúsculas (.toUpperCase()) para padronizar o banco
-            const valores = [
-                livro.getTitulo().toUpperCase(),              // $1 — Título em maiúsculas
-                livro.getAutor().toUpperCase(),               // $2 — Autor em maiúsculas
-                livro.getEditora().toUpperCase(),             // $3 — Editora em maiúsculas
-                livro.getAnoPublicacao().toUpperCase(),       // $4 — Ano de publicação em maiúsculas
-                livro.getIsbn().toUpperCase(),                // $5 — ISBN em maiúsculas
-                livro.getQuantTotal(),                        // $6 — Quantidade total (número, sem transformação)
-                livro.getQuantDisponivel(),                   // $7 — Quantidade disponível (número)
-                livro.getValorAquisicao(),                    // $8 — Valor de aquisição (número)
-                livro.getStatusLivroEmprestado().toUpperCase() // $9 — Status em maiúsculas
-            ];
-
-            // Executa a query passando o array de valores e armazena o resultado
-            const result = await database.query(queryInsertLivro, valores);
-
-            // Verifica se o banco retornou pelo menos uma linha (ou seja, o INSERT funcionou)
-            if (result.rows.length > 0) {
-                // Exibe no console o ID do livro recém-cadastrado
-                console.log(`Livro cadastrado com sucesso. ID: ${result.rows[0].id_livro}`);
-                // Retorna true para indicar sucesso
-                return true;
-            }
-
-            // Se nenhuma linha foi retornada, o cadastro não funcionou — retorna false
-            return false;
-
-        } catch (error) {
-            // Exibe o erro no console e retorna false em caso de exceção
-            console.error(`Erro ao cadastrar livro: ${error}`);
+    try {
+        // ✅ MELHORIA 1 — Validação de entrada antes de acessar o banco (Fail Fast)
+        // Verificar os dados obrigatórios ANTES de montar a query evita enviar uma
+        // requisição mal formada ao banco. "Fail fast" significa: falhe o quanto antes,
+        // com uma mensagem clara — isso torna o debug muito mais rápido.
+        if (!livro.getTitulo() || !livro.getAutor() || !livro.getEditora()) {
+            console.error(`[LivroModel] Cadastro rejeitado: campos obrigatórios ausentes.`);
             return false;
         }
+
+        // Query SQL de inserção com placeholders ($1 a $9), um para cada campo.
+        // "RETURNING id_livro" instrui o banco a retornar o ID gerado automaticamente
+        // após o INSERT — isso nos permite confirmar e logar o novo registro.
+        const queryInsertLivro = `
+            INSERT INTO Livro (
+                titulo,
+                autor,
+                editora,
+                ano_publicacao,
+                isbn,
+                quant_total,
+                quant_disponivel,
+                valor_aquisicao,
+                status_livro_emprestado
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id_livro;
+        `;
+
+        // ✅ MELHORIA 2 — Normalização de texto centralizada com helper
+        // No código original, .toUpperCase() era chamado individualmente em cada campo.
+        // Criar um helper local evita repetição e garante que a regra de negócio
+        // (texto em maiúsculas) fique em um único lugar — fácil de alterar no futuro.
+        // O .trim() remove espaços acidentais no início e no fim da string.
+        const normalizar = (valor: string): string => valor.trim().toUpperCase();
+
+        // ✅ MELHORIA 3 — Proteção de campos numéricos com Number()
+        // No original, getQuantTotal() e outros retornam números diretamente — mas se
+        // um valor vier como string (ex: vindo de um formulário), a query falharia.
+        // Number() garante a conversão segura para o tipo correto antes de enviar ao banco.
+        const valores = [
+            normalizar(livro.getTitulo()),              // $1 — Título normalizado
+            normalizar(livro.getAutor()),               // $2 — Autor normalizado
+            normalizar(livro.getEditora()),             // $3 — Editora normalizada
+            normalizar(livro.getAnoPublicacao()),       // $4 — Ano de publicação normalizado
+            normalizar(livro.getIsbn()),                // $5 — ISBN normalizado
+            Number(livro.getQuantTotal()),              // $6 — Quantidade total (numérico)
+            Number(livro.getQuantDisponivel()),         // $7 — Quantidade disponível (numérico)
+            Number(livro.getValorAquisicao()),          // $8 — Valor de aquisição (numérico)
+            normalizar(livro.getStatusLivroEmprestado()) // $9 — Status normalizado
+        ];
+
+        // Executa a query passando o array de valores — o banco substitui $1..$9 pelos
+        // valores do array na ordem em que foram declarados
+        const resultado = await database.query(queryInsertLivro, valores);
+
+        // ✅ MELHORIA 4 — Verificação e log estruturado do resultado
+        // result.rows.length > 0 confirma que o banco executou o INSERT e devolveu o ID.
+        // Se por algum motivo o INSERT não gerar retorno, capturamos isso com o else.
+        if (resultado.rows.length > 0) {
+            // Log informativo com contexto: qual modelo, qual operação, qual ID foi gerado
+            console.log(`[LivroModel] Livro cadastrado com sucesso. ID: ${resultado.rows[0].id_livro}`);
+            return true;
+        }
+
+        // Caso o banco não retorne nenhuma linha, o INSERT falhou silenciosamente
+        console.warn(`[LivroModel] INSERT executado, mas nenhum ID foi retornado.`);
+        return false;
+
+    } catch (error) {
+        // Log de erro com prefixo de contexto para facilitar rastreamento em produção
+        console.error(`[LivroModel] Erro ao cadastrar livro: ${error}`);
+        return false;
     }
+}
 
     /**
      * Remove um livro do banco de dados
