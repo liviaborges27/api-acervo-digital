@@ -284,39 +284,53 @@ static async listarAluno(id_aluno: number): Promise<AlunoDTO | null> {
     * @returns Boolean indicando se o cadastro foi bem-sucedido
     */
     // Recebe um objeto Aluno completo e tenta inseri-lo no banco de dados
-    static async cadastrarAluno(aluno: Aluno): Promise<boolean> {
-        try {
-            // Query SQL de inserção — os "$1", "$2"... são placeholders substituídos pelos valores reais
-            // "RETURNING id_aluno" faz o banco retornar o ID gerado automaticamente após o INSERT
-            const queryInsertAluno = `INSERT INTO Aluno (nome, sobrenome, data_nascimento, endereco, email, celular)
-                                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_aluno;`;
+    /**
+ * Cadastra um novo aluno no banco de dados.
+ *
+ * @param aluno - Objeto Aluno com os dados a serem inseridos
+ * @returns true se o cadastro foi realizado com sucesso, false caso contrário
+ */
+static async cadastrarAluno(aluno: Aluno): Promise<boolean> {
+    try {
+        // Normaliza os dados antes de enviar ao banco:
+        // nomes e endereço em maiúsculas (padrão de armazenamento), e-mail em minúsculas
+        // Feito aqui uma única vez, evitando repetição inline na query
+        const nome            = aluno.getNome().toUpperCase().trim();
+        const sobrenome       = aluno.getSobrenome().toUpperCase().trim();
+        const dataNascimento  = aluno.getDataNascimento();
+        const endereco        = aluno.getEndereco().toUpperCase().trim();
+        const email           = aluno.getEmail().toLowerCase().trim();
+        const celular         = aluno.getCelular();
 
-            // Executa a query passando os valores do objeto aluno
-            // .toUpperCase() converte texto para maiúsculas; .toLowerCase() converte para minúsculas
-            const result = await database.query(queryInsertAluno, [aluno.getNome().toUpperCase(),
-            aluno.getSobrenome().toUpperCase(),     // Sobrenome em maiúsculas
-            aluno.getDataNascimento(),              // Data de nascimento sem transformação
-            aluno.getEndereco().toUpperCase(),      // Endereço em maiúsculas
-            aluno.getEmail().toLowerCase(),         // E-mail em minúsculas
-            aluno.getCelular()]);                   // Celular sem transformação
+        // Prepared statement com placeholders $1..$6 — previne SQL Injection
+        // RETURNING id_aluno faz o banco retornar o ID gerado após o INSERT
+        const query = `
+            INSERT INTO aluno (nome, sobrenome, data_nascimento, endereco, email, celular)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id_aluno;
+        `;
 
-            // Verifica se o banco retornou pelo menos uma linha (ou seja, o INSERT funcionou)
-            if (result.rows.length > 0) {
-                // Exibe no console o ID do aluno recém-cadastrado
-                console.log(`Aluno cadastrado com sucesso. ID: ${result.rows[0].id_aluno}`);
-                // Retorna true para indicar sucesso
-                return true;
-            }
+        // Executa a query com os valores já normalizados
+        const { rows } = await database.query(query, [
+            nome,
+            sobrenome,
+            dataNascimento,
+            endereco,
+            email,
+            celular
+        ]);
 
-            // Se nenhuma linha foi retornada, o cadastro não funcionou — retorna false
-            return false;
-        } catch (error) {
-            // Captura e exibe qualquer erro ocorrido durante o cadastro
-            console.error(`Erro ao cadastrar aluno: ${error}`);
-            // Retorna false indicando falha
-            return false;
-        }
+        // Se o banco retornou o ID, o INSERT foi confirmado com sucesso
+        if (rows.length === 0) return false;
+
+        console.log(`Aluno cadastrado com sucesso. ID: ${rows[0].id_aluno}`);
+        return true;
+
+    } catch (error) {
+        console.error("Erro ao cadastrar aluno:", error);
+        return false;
     }
+}
 
     /**
     * Remove um aluno do banco de dados
