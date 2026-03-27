@@ -307,6 +307,17 @@ class Emprestimo {
         data_devolucao: Date,     // Nova data de devolução
         status_emprestimo: string // Novo status do empréstimo
     ): Promise<boolean> {
+        if (
+        !Number.isInteger(id_emprestimo) || id_emprestimo <= 0 ||
+        !Number.isInteger(id_aluno)      || id_aluno      <= 0 ||
+        !Number.isInteger(id_livro)      || id_livro      <= 0 ||
+        !data_emprestimo                 ||
+        !data_devolucao                  ||
+        !status_emprestimo?.trim()
+    ) {
+        console.warn(`[atualizarEmprestimo] Dados inválidos ou incompletos recebidos.`);
+        return false;
+    }
         try {
             // Query SQL de atualização — o WHERE garante que apenas o empréstimo com o ID correto seja alterado
             // "RETURNING id_emprestimo" retorna o ID do registro atualizado, confirmando que ele existe
