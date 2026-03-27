@@ -184,50 +184,55 @@ class AlunoController extends Aluno {
      * @returns Retorna uma resposta HTTP indicando sucesso ou falha na atualização
      */
     // Método que recebe os novos dados do front-end e atualiza o cadastro do aluno no banco
-    static async atualizar(req: Request, res: Response): Promise<Response> {
-        try {
-            // Lê o corpo da requisição e tipifica como AlunoDTO
-            // O front-end envia os dados atualizados no corpo da requisição
-            const dadosRecebidos: AlunoDTO = req.body;
+   static async atualizar(req: Request, res: Response): Promise<Response> {
+    try {
+        // 1. Validação do ID: Garantimos que o ID da URL é válido antes de processar o corpo.
+        const idAluno = Number(req.params.id);
 
-            // Cria um novo objeto Aluno com os dados atualizados recebidos do front-end
-            // Mesma lógica do método cadastrar — usa "??" para garantir valores padrão nos campos opcionais
-            const aluno = new Aluno(
-                dadosRecebidos.nome,
-                dadosRecebidos.sobrenome,
-                dadosRecebidos.data_nascimento ?? new Date("1900-01-01"),
-                dadosRecebidos.endereco ?? '',
-                dadosRecebidos.email ?? '',
-                dadosRecebidos.celular
-            );
-
-            // Define o ID do aluno no objeto criado, lendo o parâmetro "id" da URL
-            // Isso é necessário para que o model saiba QUAL aluno deve ser atualizado no banco
-            // Exemplo de URL: PUT /aluno/7  →  setIdAluno(7)
-            const idAluno = parseInt(req.params.id as string);
-            if (isNaN(idAluno)) {
-                return res.status(400).json({ mensagem: "ID inválido." });
-            }
-            aluno.setIdAluno(idAluno);
-
-            // Chama o método do model para atualizar os dados do aluno no banco de dados
-            const result = await Aluno.atualizarAluno(aluno);
-
-            // Verifica o retorno do model: true = atualização bem-sucedida, false = falha
-            if (result) {
-                // Retorna mensagem de sucesso com status HTTP 200 (OK)
-                return res.status(200).json({ mensagem: "Cadastro atualizado com sucesso." });
-            } else {
-                // Retorna mensagem de erro com status HTTP 500 se o banco não conseguiu atualizar
-                return res.status(500).json({ mensagem: 'Não foi possível atualizar o aluno no banco de dados.' });
-            }
-        } catch (error) {
-            // Registra o erro nos logs do servidor
-            console.error(`Erro ao atualizar aluno: ${error}`);
-            // Retorna mensagem de erro com status HTTP 500 em caso de exceção inesperada
-            return res.status(500).json({ mensagem: "Erro ao atualizar aluno." });
+        if (isNaN(idAluno)) {
+            return res.status(400).json({ mensagem: "ID inválido. A atualização requer um identificador numérico." });
         }
+
+        // 2. Desestruturação: Extração limpa dos dados do corpo da requisição.
+        const { nome, sobrenome, data_nascimento, endereco, email, celular }: AlunoDTO = req.body;
+
+        // 3. Validação de Regra de Negócio: Impede que o usuário tente "esvaziar" campos obrigatórios.
+        if (!nome || !sobrenome) {
+            return res.status(400).json({ mensagem: "Nome e sobrenome são obrigatórios para a atualização." });
+        }
+
+        // 4. Instanciação e Configuração: 
+        // Criamos o objeto Aluno e injetamos o ID validado da URL.
+        const aluno = new Aluno(
+            nome,
+            sobrenome,
+            data_nascimento ? new Date(data_nascimento) : new Date("1900-01-01"),
+            endereco ?? '',
+            email ?? '',
+            celular
+        );
+        aluno.setIdAluno(idAluno);
+
+        // 5. Persistência: 
+        const result = await Aluno.atualizarAluno(aluno);
+
+        // 6. Resposta Estratégica:
+        if (result) {
+            return res.status(200).json({ mensagem: "Cadastro atualizado com sucesso." });
+        }
+
+        // Se result for false, geralmente significa que o ID não foi encontrado no banco.
+        return res.status(404).json({ mensagem: "Aluno não encontrado para atualização." });
+
+    } catch (error) {
+        // 7. Log Profissional: 
+        console.error(`[ERRO NA ATUALIZAÇÃO DE ALUNO]: ${error}`);
+        
+        return res.status(500).json({ 
+            mensagem: "Erro interno ao atualizar os dados do aluno." 
+        });
     }
+}
 }
 
 // Exporta a classe AlunoController para que possa ser importada e usada nas rotas da aplicação
