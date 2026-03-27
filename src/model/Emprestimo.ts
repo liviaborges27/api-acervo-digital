@@ -356,6 +356,10 @@ class Emprestimo {
      */
     // Realiza uma remoção lógica: não apaga o registro, apenas muda o status para FALSE
     static async removerEmprestimo(id_emprestimo: number): Promise<boolean> {
+         if (!Number.isInteger(id_emprestimo) || id_emprestimo <= 0) {
+        console.warn(`[removerEmprestimo] ID inválido recebido: ${id_emprestimo}`);
+        return false;
+    }
         try {
             // Query de remoção lógica — usa UPDATE para desativar o registro em vez de DELETE
             // Isso preserva o histórico de empréstimos no banco de dados
