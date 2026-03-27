@@ -193,7 +193,7 @@ class Emprestimo {
     }
 }
 
-    /**
+   /**
      * Retorna as informações de um empréstimo informado pelo ID
      * 
      * @param id_emprestimo Identificador único do empréstimo
@@ -201,6 +201,14 @@ class Emprestimo {
      */
     // Recebe o ID do empréstimo e retorna um único EmprestimoDTO ou null
     static async listarEmprestimo(id_emprestimo: number): Promise<EmprestimoDTO | null> {
+
+    // ✅ Validação de entrada — garante que o ID seja um inteiro positivo
+    // antes de qualquer acesso ao banco, evitando queries desnecessárias
+    if (!Number.isInteger(id_emprestimo) || id_emprestimo <= 0) {
+        console.warn(`[listarEmprestimo] ID inválido recebido: ${id_emprestimo}`);
+        return null;
+    }
+
         try {
             // Query SQL com JOIN igual ao listarEmprestimos, mas filtrando por um ID específico
             // O "$1" é o placeholder que será substituído pelo valor de id_emprestimo (proteção contra SQL Injection)
