@@ -280,12 +280,10 @@ class Emprestimo {
             const resultado = await database.query(queryInsertEmprestimo, valores);
 
             // Se rowCount for diferente de 0, pelo menos uma linha foi inserida — o cadastro foi bem-sucedido
-            if (resultado.rowCount != 0) {
-                // Exibe no console o ID do empréstimo recém-criado
-                console.log(`Empréstimo cadastrado com sucesso! ID: ${resultado.rows[0].id_emprestimo}`);
-                // Retorna true para indicar sucesso
-                return true;
-            }
+            if (resultado.rowCount !== 0) {
+            console.log(`[cadastrarEmprestimo] Empréstimo cadastrado com sucesso! ID: ${resultado.rows[0].id_emprestimo}`);
+            return true;
+        }
 
             // Se nenhuma linha foi afetada, o cadastro não funcionou — retorna false
             return false;
