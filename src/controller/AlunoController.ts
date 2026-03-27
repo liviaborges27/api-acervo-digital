@@ -45,22 +45,39 @@ class AlunoController extends Aluno {
      */
     // Método que busca um único aluno com base no ID informado na URL (ex: GET /aluno/5)
     static async aluno(req: Request, res: Response) {
-        try {
-            // Lê o parâmetro "id" da URL (req.params.id) e converte de string para número inteiro
-            // O "as string" garante ao TypeScript que o valor existe e é uma string
-            const idAluno = parseInt(req.params.id as string);
+    try {
+        // 1. Validação de Entrada: Convertendo e verificando se o ID é um número válido.
+        // O uso do Number() é mais rigoroso que parseInt() para evitar "123xyz" virar 123.
+        const idAluno = Number(req.params.id);
 
-            // Chama o método do model passando o ID para buscar o aluno específico no banco
-            const aluno = await Aluno.listarAluno(idAluno);
-            // Retorna o objeto do aluno em JSON com status HTTP 200 (OK)
-            res.status(200).json(aluno);
-        } catch (error) {
-            // Exibe o erro no console do servidor
-            console.log(`Erro ao acessar método herdado: ${error}`);
-            // Retorna mensagem de erro com status HTTP 500
-            res.status(500).json("Erro ao recuperar as informações do aluno.");
+        if (isNaN(idAluno)) {
+            return res.status(400).json({ mensagem: "O ID fornecido é inválido. Deve ser um número." });
         }
+
+        // 2. Performance e Busca: Chamada ao Model.
+        // Dica de performance: Certifique-se que a coluna 'id' no banco possui um ÍNDICE.
+        const aluno = await Aluno.listarAluno(idAluno);
+
+        // 3. Verificação de Existência: Se o banco retornar null/undefined, 
+        // o status correto é 404 (Not Found), não 200.
+        if (!aluno) {
+            return res.status(404).json({ mensagem: "Aluno não encontrado." });
+        }
+
+        // 4. Resposta de Sucesso: Retornamos o objeto de forma clara.
+        return res.status(200).json(aluno);
+
+    } catch (error) {
+        // 5. Tratamento de Erro: Logamos o erro internamente para depuração,
+        // mas não expomos detalhes sensíveis do banco para o cliente.
+        console.error(`[ERRO NO CONTROLLER ALUNO]: ${error}`);
+        
+        return res.status(500).json({ 
+            mensagem: "Erro interno ao recuperar as informações do aluno.",
+            erro: process.env.NODE_ENV === 'development' ? error : {} 
+        });
     }
+}
 
     /**
       * Cadastra um novo aluno.
