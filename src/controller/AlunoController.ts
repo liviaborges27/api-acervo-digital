@@ -87,39 +87,51 @@ class AlunoController extends Aluno {
       */
     // Método que recebe os dados do front-end e cria um novo aluno no banco de dados
     static async cadastrar(req: Request, res: Response) {
-        try {
-            // Lê o corpo (body) da requisição HTTP e o tipifica como AlunoDTO
-            // O front-end envia os dados do novo aluno no corpo da requisição (geralmente em formato JSON)
-            const dadosRecebidos: AlunoDTO = req.body;
+    try {
+        // 1. Desestruturação e Tipagem: Extraímos apenas o necessário do body.
+        // Isso evita que campos maliciosos ou desnecessários entrem na lógica.
+        const { nome, sobrenome, data_nascimento, endereco, email, celular }: AlunoDTO = req.body;
 
-            // Cria um novo objeto Aluno usando os dados recebidos do front-end
-            // O operador "??" define valores padrão caso os campos opcionais não tenham sido enviados
-            const novoAluno = new Aluno(
-                dadosRecebidos.nome,                                      // Nome obrigatório
-                dadosRecebidos.sobrenome,                                 // Sobrenome obrigatório
-                dadosRecebidos.data_nascimento ?? new Date("1900-01-01"), // Se não informado, usa 01/01/1900
-                dadosRecebidos.endereco ?? '',                            // Se não informado, usa string vazia
-                dadosRecebidos.email ?? '',                               // Se não informado, usa string vazia
-                dadosRecebidos.celular                                    // Celular opcional (pode ser undefined)
-            );
-
-            // Chama o método do model para persistir (salvar) o novo aluno no banco de dados
-            const result = await Aluno.cadastrarAluno(novoAluno);
-
-            // Verifica o retorno do model: true = cadastro bem-sucedido, false = falha
-            if (result) {
-                // Retorna mensagem de sucesso com status HTTP 201 (Created — recurso criado com sucesso)
-                return res.status(201).json({ mensagem: `Aluno cadastrado com sucesso.` });
-            } else {
-                // Retorna mensagem de erro com status HTTP 500 se o banco não conseguiu salvar
-                return res.status(500).json({ mensagem: 'Não foi possível cadastrar o aluno no banco de dados.' });
-            }
-        } catch (error) {
-            // Exibe o erro no console e retorna status HTTP 500 em caso de exceção inesperada
-            console.log(`Erro ao cadastrar o aluno: ${error}`);
-            return res.status(500).json({ mensagem: 'Erro ao cadastrar o aluno.' });
+        // 2. Validação de Campos Obrigatórios: Importante para evitar erros de "null constraint" no banco.
+        if (!nome || !sobrenome) {
+            return res.status(400).json({ 
+                mensagem: "Campos obrigatórios (nome e sobrenome) não foram preenchidos." 
+            });
         }
+
+        // 3. Instanciação com Valores Padrão: 
+        // Usamos uma abordagem limpa para tratar valores opcionais.
+        const novoAluno = new Aluno(
+            nome,
+            sobrenome,
+            data_nascimento ? new Date(data_nascimento) : new Date("1900-01-01"),
+            endereco ?? '',
+            email ?? '',
+            celular
+        );
+
+        // 4. Persistência: Chamada ao Model.
+        const result = await Aluno.cadastrarAluno(novoAluno);
+
+        // 5. Resposta Semântica: 
+        // Se o recurso foi criado, retornamos 201 (Created).
+        if (result) {
+            return res.status(201).json({ mensagem: "Aluno cadastrado com sucesso!" });
+        }
+
+        // Caso o banco retorne false por algum motivo de regra de negócio interna.
+        return res.status(422).json({ mensagem: "Não foi possível processar o cadastro do aluno." });
+
+    } catch (error) {
+        // 6. Log Profissional: console.error para rastreamento em ferramentas de monitoramento.
+        console.error(`[ERRO NO CADASTRO DE ALUNO]: ${error}`);
+        
+        return res.status(500).json({ 
+            mensagem: "Erro interno ao processar o cadastro.",
+            detalhes: process.env.NODE_ENV === 'development' ? error : {}
+        });
     }
+}
 
     /**
      * Remove um aluno.
