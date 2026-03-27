@@ -168,92 +168,53 @@ class Livro {
      * @returns Lista com todos os livros cadastrados no banco de dados
      */
     // Método assíncrono que busca todos os livros ativos e retorna uma lista de LivroDTO ou null
-    /**
- * Lista todos os livros com status ativo no sistema.
- *
- * @returns Promise com array de LivroDTO em caso de sucesso, ou null em caso de erro.
- *
- * Boas práticas aplicadas:
- * - Tipagem explícita e segura
- * - Query parametrizada (resistente a SQL Injection)
- * - Mapeamento funcional com map() ao invés de forEach + push
- * - Log de erro estruturado com console.error
- * - Seleção explícita de colunas ao invés de SELECT *
- */
-static async listarLivros(): Promise<Array<LivroDTO> | null> {
-    try {
-        // ✅ MELHORIA 1 — Colunas explícitas ao invés de SELECT *
-        // Usar SELECT * traz todas as colunas, mesmo as desnecessárias.
-        // Listar as colunas garante que você controla exatamente o que vem do banco,
-        // evita quebras se novas colunas forem adicionadas e melhora a performance.
-        const querySelectLivro = `
-            SELECT
-                id_livro,
-                titulo,
-                autor,
-                editora,
-                ano_publicacao,
-                isbn,
-                quant_total,
-                quant_disponivel,
-                quant_aquisicao,
-                valor_aquisicao,
-                status_livro_emprestado,
-                status_livro
-            FROM Livro
-            WHERE status_livro = TRUE;
-        `;
+    static async listarLivros(): Promise<Array<LivroDTO> | null> {
+        // Cria uma lista vazia que vai receber os livros encontrados no banco
+        let listaDeLivros: Array<LivroDTO> = [];
 
-        // Executa a query no banco de dados e aguarda o resultado
-        const respostaBD = await database.query(querySelectLivro);
+        try {
+            // Query SQL que busca todos os livros com status ativo (status_livro = TRUE)
+            // Livros com status FALSE foram removidos logicamente e não devem aparecer
+            const querySelectLivro = `SELECT * FROM Livro WHERE status_livro = TRUE;`;
 
-        // ✅ MELHORIA 2 — Verificação antecipada (Early Return)
-        // Se não houver linhas retornadas, retorna imediatamente um array vazio.
-        // Evita processamento desnecessário e torna a intenção do código mais clara.
-        if (!respostaBD.rows || respostaBD.rows.length === 0) {
-            return [];
+            // Executa a query no banco de dados e aguarda o resultado
+            const respostaBD = await database.query(querySelectLivro);
+
+            // Percorre cada linha retornada pelo banco de dados
+            // "livro" é o apelido dado a cada registro individual retornado
+            respostaBD.rows.forEach((livro) => {
+                // Monta o objeto LivroDTO com os dados da linha atual
+                // LivroDTO é um objeto simples de dados (sem métodos), diferente da classe Livro
+                const livroDTO: LivroDTO = {
+                    id_livro: livro.id_livro,                           // ID do livro
+                    titulo: livro.titulo,                               // Título
+                    autor: livro.autor,                                 // Autor
+                    editora: livro.editora,                             // Editora
+                    ano_publicacao: livro.ano_publicacao,               // Ano de publicação
+                    isbn: livro.isbn,                                   // ISBN
+                    quant_total: livro.quant_total,                     // Quantidade total
+                    quant_disponivel: livro.quant_disponivel,           // Quantidade disponível
+                    quant_aquisicao: livro.quant_aquisicao,             // Quantidade de aquisição
+                    valor_aquisicao: livro.valor_aquisicao,             // Valor de aquisição
+                    status_livro_emprestado: livro.status_livro_emprestado, // Status de empréstimo
+                    status_livro: livro.status_livro                    // Status ativo/inativo
+                };
+
+                // Adiciona o objeto LivroDTO à lista
+                listaDeLivros.push(livroDTO);
+            });
+
+            // Retorna a lista com todos os livros encontrados
+            return listaDeLivros;
+
+        } catch (error) {
+            // Se ocorrer qualquer erro durante a consulta, exibe no console para facilitar o debug
+            console.log(`Erro ao acessar o modelo: ${error}`);
+            // Retorna null para indicar que houve falha
+            return null;
         }
-
-        // ✅ MELHORIA 3 — map() ao invés de forEach + push
-        // O método map() é a forma idiomática (padrão da linguagem) de transformar
-        // uma lista em outra. É mais legível, funcional e elimina a necessidade de
-        // criar uma variável auxiliar vazia antes do try.
-        const listaDeLivros: Array<LivroDTO> = respostaBD.rows.map((livro) => {
-            // Monta o objeto LivroDTO com os dados da linha atual.
-            // LivroDTO é um objeto simples de dados (sem métodos), ideal para
-            // transferência de informações entre camadas da aplicação (Model → Controller → Client).
-            const livroDTO: LivroDTO = {
-                id_livro: livro.id_livro,
-                titulo: livro.titulo,
-                autor: livro.autor,
-                editora: livro.editora,
-                ano_publicacao: livro.ano_publicacao,
-                isbn: livro.isbn,
-                quant_total: livro.quant_total,
-                quant_disponivel: livro.quant_disponivel,
-                quant_aquisicao: livro.quant_aquisicao,
-                valor_aquisicao: livro.valor_aquisicao,
-                status_livro_emprestado: livro.status_livro_emprestado,
-                status_livro: livro.status_livro,
-            };
-
-            return livroDTO;
-        });
-
-        // Retorna a lista populada com todos os livros ativos encontrados
-        return listaDeLivros;
-
-    } catch (error) {
-        // ✅ MELHORIA 4 — console.error ao invés de console.log para erros
-        // console.error envia a mensagem para o fluxo de erro padrão (stderr),
-        // separando erros de logs informativos. Isso facilita o monitoramento
-        // e a integração com ferramentas de observabilidade (ex: Datadog, Sentry).
-        console.error(`[LivroModel] Erro ao listar livros: ${error}`);
-
-        // Retorna null para indicar que houve uma falha na consulta
-        return null;
     }
-}
+
     /**
      * Retorna as informações de um livro informado pelo ID
      * 
@@ -261,89 +222,41 @@ static async listarLivros(): Promise<Array<LivroDTO> | null> {
      * @returns Objeto com informações do livro
      */
     // Recebe o ID do livro e retorna um único LivroDTO ou null
-    /**
- * Busca um livro específico pelo seu ID no banco de dados.
- *
- * @param id_livro - ID numérico do livro a ser buscado
- * @returns Promise com LivroDTO em caso de sucesso, ou null se não encontrado / erro
- *
- * Boas práticas aplicadas:
- * - Colunas explícitas ao invés de SELECT *
- * - Verificação de existência antes de acessar rows[0]
- * - Desestruturação para eliminar repetição de código
- * - Log de erro estruturado com prefixo de contexto
- */
-static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
-    try {
-        // ✅ MELHORIA 1 — Colunas explícitas ao invés de SELECT *
-        // Selecionar apenas as colunas necessárias evita tráfego desnecessário de dados
-        // entre o banco e a aplicação, e protege contra quebras quando o schema é alterado.
-        // O "$1" é um placeholder que o banco substitui pelo valor real — isso impede SQL Injection.
-        const querySelectLivro = `
-            SELECT
-                id_livro,
-                titulo,
-                autor,
-                editora,
-                ano_publicacao,
-                isbn,
-                quant_total,
-                quant_disponivel,
-                quant_aquisicao,
-                valor_aquisicao,
-                status_livro_emprestado,
-                status_livro
-            FROM livro
-            WHERE id_livro = $1
-              AND status_livro = TRUE;
-        `;
+    static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
+        try {
+            // Query SQL que busca um livro específico pelo ID
+            // O "$1" é um placeholder substituído pelo valor real (proteção contra SQL Injection)
+            const querySelectLivro = `SELECT * FROM livro WHERE id_livro = $1`;
 
-        // Executa a query passando o id_livro como parâmetro (substitui o $1)
-        const respostaBD = await database.query(querySelectLivro, [id_livro]);
+            // Executa a query passando o id_livro como parâmetro (substitui o $1)
+            const respostaBD = await database.query(querySelectLivro, [id_livro]);
 
-        // ✅ MELHORIA 2 — Verificação de existência antes de acessar rows[0]
-        // Sem essa checagem, se nenhum livro for encontrado, respostaBD.rows[0] será
-        // undefined — e tentar acessar rows[0].titulo causaria um TypeError em runtime.
-        // Retornar null aqui é a forma correta de sinalizar "livro não encontrado".
-        if (!respostaBD.rows || respostaBD.rows.length === 0) {
+            // Monta o objeto LivroDTO com os dados da primeira (e única) linha retornada
+            // rows[0] acessa o primeiro elemento do array de resultados
+            const livroDTO: LivroDTO = {
+                id_livro: respostaBD.rows[0].id_livro,
+                titulo: respostaBD.rows[0].titulo,
+                autor: respostaBD.rows[0].autor,
+                editora: respostaBD.rows[0].editora,
+                ano_publicacao: respostaBD.rows[0].ano_publicacao,
+                isbn: respostaBD.rows[0].isbn,
+                quant_total: respostaBD.rows[0].quant_total,
+                quant_disponivel: respostaBD.rows[0].quant_disponivel,
+                quant_aquisicao: respostaBD.rows[0].quant_aquisicao,
+                valor_aquisicao: respostaBD.rows[0].valor_aquisicao,
+                status_livro_emprestado: respostaBD.rows[0].status_livro_emprestado,
+                status_livro: respostaBD.rows[0].status_livro
+            };
+
+            // Retorna o objeto LivroDTO preenchido com os dados do banco
+            return livroDTO;
+        } catch (error) {
+            // Exibe o erro no console e retorna null em caso de falha
+            console.error(`Erro ao realizar consulta. ${error}`);
             return null;
         }
-
-        // ✅ MELHORIA 3 — Desestruturação do resultado
-        // Ao invés de repetir respostaBD.rows[0] em cada campo do DTO,
-        // extraímos o registro em uma variável própria.
-        // Isso elimina repetição, reduz chance de erro de digitação e melhora a leitura.
-        const livro = respostaBD.rows[0];
-
-        // Monta o objeto LivroDTO com os dados da linha retornada pelo banco.
-        // LivroDTO é um objeto simples de dados (sem métodos), ideal para
-        // transferir informações entre as camadas da aplicação (Model → Controller → Client).
-        const livroDTO: LivroDTO = {
-            id_livro:                   livro.id_livro,
-            titulo:                     livro.titulo,
-            autor:                      livro.autor,
-            editora:                    livro.editora,
-            ano_publicacao:             livro.ano_publicacao,
-            isbn:                       livro.isbn,
-            quant_total:                livro.quant_total,
-            quant_disponivel:           livro.quant_disponivel,
-            quant_aquisicao:            livro.quant_aquisicao,
-            valor_aquisicao:            livro.valor_aquisicao,
-            status_livro_emprestado:    livro.status_livro_emprestado,
-            status_livro:               livro.status_livro,
-        };
-
-        // Retorna o DTO preenchido com os dados do livro encontrado
-        return livroDTO;
-
-    } catch (error) {
-        // ✅ MELHORIA 4 — Log de erro estruturado com contexto
-        // Adicionar "[LivroModel]" e o ID consultado facilita rastrear a origem do problema
-        // ao analisar logs em produção — especialmente em APIs com múltiplos modelos e rotas.
-        console.error(`[LivroModel] Erro ao buscar livro ID ${id_livro}: ${error}`);
-        return null;
     }
-}
+
     /**
      * Cadastra um novo livro no banco de dados
      * @param livro Objeto Livro contendo as informações a serem cadastradas
@@ -351,81 +264,48 @@ static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
      */
     // Recebe um objeto Livro completo e tenta inseri-lo no banco de dados
     static async cadastrarLivro(livro: Livro): Promise<boolean> {
-    try {
-        // ✅ MELHORIA 1 — Validação de entrada antes de acessar o banco (Fail Fast)
-        // Verificar os dados obrigatórios ANTES de montar a query evita enviar uma
-        // requisição mal formada ao banco. "Fail fast" significa: falhe o quanto antes,
-        // com uma mensagem clara — isso torna o debug muito mais rápido.
-        if (!livro.getTitulo() || !livro.getAutor() || !livro.getEditora()) {
-            console.error(`[LivroModel] Cadastro rejeitado: campos obrigatórios ausentes.`);
+        try {
+            // Query SQL de inserção com 9 placeholders ($1 a $9), um para cada campo
+            // "RETURNING id_livro" faz o banco retornar o ID gerado automaticamente após o INSERT
+            const queryInsertLivro = `
+                INSERT INTO Livro (titulo, autor, editora, ano_publicacao, isbn, quant_total, quant_disponivel, valor_aquisicao, status_livro_emprestado)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING id_livro;`;
+
+            // Organiza os valores em um array na mesma ordem dos placeholders da query
+            // Textos são convertidos para maiúsculas (.toUpperCase()) para padronizar o banco
+            const valores = [
+                livro.getTitulo().toUpperCase(),              // $1 — Título em maiúsculas
+                livro.getAutor().toUpperCase(),               // $2 — Autor em maiúsculas
+                livro.getEditora().toUpperCase(),             // $3 — Editora em maiúsculas
+                livro.getAnoPublicacao().toUpperCase(),       // $4 — Ano de publicação em maiúsculas
+                livro.getIsbn().toUpperCase(),                // $5 — ISBN em maiúsculas
+                livro.getQuantTotal(),                        // $6 — Quantidade total (número, sem transformação)
+                livro.getQuantDisponivel(),                   // $7 — Quantidade disponível (número)
+                livro.getValorAquisicao(),                    // $8 — Valor de aquisição (número)
+                livro.getStatusLivroEmprestado().toUpperCase() // $9 — Status em maiúsculas
+            ];
+
+            // Executa a query passando o array de valores e armazena o resultado
+            const result = await database.query(queryInsertLivro, valores);
+
+            // Verifica se o banco retornou pelo menos uma linha (ou seja, o INSERT funcionou)
+            if (result.rows.length > 0) {
+                // Exibe no console o ID do livro recém-cadastrado
+                console.log(`Livro cadastrado com sucesso. ID: ${result.rows[0].id_livro}`);
+                // Retorna true para indicar sucesso
+                return true;
+            }
+
+            // Se nenhuma linha foi retornada, o cadastro não funcionou — retorna false
+            return false;
+
+        } catch (error) {
+            // Exibe o erro no console e retorna false em caso de exceção
+            console.error(`Erro ao cadastrar livro: ${error}`);
             return false;
         }
-
-        // Query SQL de inserção com placeholders ($1 a $9), um para cada campo.
-        // "RETURNING id_livro" instrui o banco a retornar o ID gerado automaticamente
-        // após o INSERT — isso nos permite confirmar e logar o novo registro.
-        const queryInsertLivro = `
-            INSERT INTO Livro (
-                titulo,
-                autor,
-                editora,
-                ano_publicacao,
-                isbn,
-                quant_total,
-                quant_disponivel,
-                valor_aquisicao,
-                status_livro_emprestado
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id_livro;
-        `;
-
-        // ✅ MELHORIA 2 — Normalização de texto centralizada com helper
-        // No código original, .toUpperCase() era chamado individualmente em cada campo.
-        // Criar um helper local evita repetição e garante que a regra de negócio
-        // (texto em maiúsculas) fique em um único lugar — fácil de alterar no futuro.
-        // O .trim() remove espaços acidentais no início e no fim da string.
-        const normalizar = (valor: string): string => valor.trim().toUpperCase();
-
-        // ✅ MELHORIA 3 — Proteção de campos numéricos com Number()
-        // No original, getQuantTotal() e outros retornam números diretamente — mas se
-        // um valor vier como string (ex: vindo de um formulário), a query falharia.
-        // Number() garante a conversão segura para o tipo correto antes de enviar ao banco.
-        const valores = [
-            normalizar(livro.getTitulo()),              // $1 — Título normalizado
-            normalizar(livro.getAutor()),               // $2 — Autor normalizado
-            normalizar(livro.getEditora()),             // $3 — Editora normalizada
-            normalizar(livro.getAnoPublicacao()),       // $4 — Ano de publicação normalizado
-            normalizar(livro.getIsbn()),                // $5 — ISBN normalizado
-            Number(livro.getQuantTotal()),              // $6 — Quantidade total (numérico)
-            Number(livro.getQuantDisponivel()),         // $7 — Quantidade disponível (numérico)
-            Number(livro.getValorAquisicao()),          // $8 — Valor de aquisição (numérico)
-            normalizar(livro.getStatusLivroEmprestado()) // $9 — Status normalizado
-        ];
-
-        // Executa a query passando o array de valores — o banco substitui $1..$9 pelos
-        // valores do array na ordem em que foram declarados
-        const resultado = await database.query(queryInsertLivro, valores);
-
-        // ✅ MELHORIA 4 — Verificação e log estruturado do resultado
-        // result.rows.length > 0 confirma que o banco executou o INSERT e devolveu o ID.
-        // Se por algum motivo o INSERT não gerar retorno, capturamos isso com o else.
-        if (resultado.rows.length > 0) {
-            // Log informativo com contexto: qual modelo, qual operação, qual ID foi gerado
-            console.log(`[LivroModel] Livro cadastrado com sucesso. ID: ${resultado.rows[0].id_livro}`);
-            return true;
-        }
-
-        // Caso o banco não retorne nenhuma linha, o INSERT falhou silenciosamente
-        console.warn(`[LivroModel] INSERT executado, mas nenhum ID foi retornado.`);
-        return false;
-
-    } catch (error) {
-        // Log de erro com prefixo de contexto para facilitar rastreamento em produção
-        console.error(`[LivroModel] Erro ao cadastrar livro: ${error}`);
-        return false;
     }
-}
 
     /**
      * Remove um livro do banco de dados
@@ -434,84 +314,43 @@ static async listarLivro(id_livro: number): Promise<LivroDTO | null> {
     */
     // Realiza uma remoção lógica: não apaga o registro, apenas muda o status para FALSE
     static async removerLivro(id_livro: number): Promise<boolean> {
-    try {
-        // ✅ MELHORIA 1 — Validação de entrada antes de qualquer operação
-        // Se o ID recebido não for um número válido, rejeitamos imediatamente.
-        // Isso evita uma consulta desnecessária ao banco com um valor inútil.
-        if (!id_livro || isNaN(id_livro)) {
-            console.warn(`[LivroModel] Remoção rejeitada: ID inválido recebido (${id_livro})`);
+        try {
+            // Busca o livro no banco antes de tentar remover, para verificar se ele existe e está ativo
+            const livro: LivroDTO | null = await this.listarLivro(id_livro);
+
+            // Só prossegue se o livro existir (não for null) E estiver com status ativo (true)
+            if (livro && livro.status_livro) {
+                // Primeiro desativa todos os empréstimos relacionados a este livro
+                // Isso garante a consistência dos dados — um livro removido não pode ter empréstimos ativos
+                const queryDeleteEmprestimoLivro = `UPDATE emprestimo
+                                    SET status_emprestimo_registro = FALSE 
+                                    WHERE id_livro = $1`;
+
+                // Executa a desativação dos empréstimos do livro (não precisa verificar o resultado aqui)
+                await database.query(queryDeleteEmprestimoLivro, [id_livro]);
+
+                // Agora desativa o próprio livro (remoção lógica — não apaga, apenas muda o status)
+                const queryDeleteLivro = `UPDATE livro
+                          SET status_livro = FALSE 
+                          WHERE id_livro = $1`;
+
+                // Executa a desativação do livro e armazena o resultado
+                const result = await database.query(queryDeleteLivro, [id_livro]);
+
+                // "rowCount" indica quantas linhas foram afetadas pelo UPDATE
+                // Retorna true se pelo menos uma linha foi alterada, false caso contrário
+                return result.rowCount != 0;
+            }
+
+            // Se o livro não existir ou já estiver inativo, retorna false
+            return false;
+        } catch (error) {
+            // Exibe o erro no console e retorna false em caso de falha
+            console.log(`Erro na consulta: ${error}`);
             return false;
         }
-
-        // Busca o livro no banco antes de tentar remover, para verificar se ele existe e está ativo.
-        // Reutilizamos o método listarLivro() já existente — sem duplicar a query de SELECT.
-        const livro: LivroDTO | null = await LivroModel.listarLivro(id_livro);
-
-        // Se o livro não existir ou já estiver inativo, não há nada a remover
-        if (!livro || !livro.status_livro) {
-            console.warn(`[LivroModel] Remoção ignorada: livro ID ${id_livro} não encontrado ou já inativo.`);
-            return false;
-        }
-
-        // ✅ MELHORIA 2 — Uso de transação para garantir consistência dos dados
-        // Os dois UPDATEs (empréstimos + livro) precisam acontecer juntos ou não acontecer.
-        // Sem transação, se o segundo UPDATE falhar, os empréstimos já teriam sido desativados,
-        // deixando o banco em estado inconsistente.
-        //
-        // BEGIN    → inicia a transação (agrupa as operações)
-        // COMMIT   → confirma todas as operações se tudo correu bem
-        // ROLLBACK → desfaz tudo se algo falhar (feito automaticamente no catch)
-        await database.query('BEGIN');
-
-        // Desativa todos os empréstimos vinculados a este livro.
-        // Um livro removido não pode manter empréstimos ativos no sistema.
-        const queryDesativarEmprestimos = `
-            UPDATE emprestimo
-               SET status_emprestimo_registro = FALSE
-             WHERE id_livro = $1;
-        `;
-        await database.query(queryDesativarEmprestimos, [id_livro]);
-
-        // Desativa o próprio livro (remoção lógica).
-        // O registro permanece no banco para preservar histórico — apenas o status muda.
-        const queryDesativarLivro = `
-            UPDATE livro
-               SET status_livro = FALSE
-             WHERE id_livro = $1;
-        `;
-        const resultado = await database.query(queryDesativarLivro, [id_livro]);
-
-        // Confirma a transação — ambos os UPDATEs foram executados com sucesso
-        await database.query('COMMIT');
-
-        // ✅ MELHORIA 3 — Comparação estrita === ao invés de !=
-        // O operador != faz coerção de tipo (ex: "0" != 0 é false), o que pode
-        // gerar comportamentos inesperados. O === / !== compara valor E tipo,
-        // sendo mais seguro e explícito.
-        //
-        // rowCount retorna o número de linhas afetadas pelo UPDATE.
-        // Se for maior que 0, o livro foi desativado com sucesso.
-        const foiRemovido = (resultado.rowCount ?? 0) > 0;
-
-        if (foiRemovido) {
-            console.log(`[LivroModel] Livro ID ${id_livro} removido com sucesso.`);
-        } else {
-            console.warn(`[LivroModel] UPDATE executado, mas nenhuma linha foi afetada para o ID ${id_livro}.`);
-        }
-
-        return foiRemovido;
-
-    } catch (error) {
-        // ✅ MELHORIA 4 — ROLLBACK no catch para desfazer operações parciais
-        // Se qualquer erro ocorrer após o BEGIN, precisamos desfazer as operações
-        // já executadas dentro da transação para não deixar o banco inconsistente.
-        await database.query('ROLLBACK');
-
-        // console.error ao invés de console.log — erros devem ir para stderr
-        console.error(`[LivroModel] Erro ao remover livro ID ${id_livro}: ${error}`);
-        return false;
     }
-}
+
     /**
      * Atualiza os dados de um livro no banco de dados.
      * @param livro Objeto do tipo Livro com os novos dados
