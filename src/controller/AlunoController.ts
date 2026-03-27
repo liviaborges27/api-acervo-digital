@@ -24,9 +24,14 @@ class AlunoController extends Aluno {
             const listaDeAlunos = await Aluno.listarAlunos();
             // Retorna a lista em formato JSON com status HTTP 200 (OK — requisição bem-sucedida)
             res.status(200).json(listaDeAlunos);
+             if (!listaDeAlunos) {
+            console.warn(`[todos] Nenhum dado retornado pelo model.`);
+            res.status(500).json({ mensagem: "Erro ao recuperar a lista de alunos." });
+            return;
+        }
         } catch (error) {
             // Se ocorrer qualquer erro, exibe os detalhes no console do servidor para facilitar o debug
-            console.log(`Erro ao acessar método herdado: ${error}`);
+             console.error(`Erro ao acessar método herdado: ${error}`);
             // Retorna uma mensagem de erro em JSON com status HTTP 500 (Internal Server Error)
             res.status(500).json("Erro ao recuperar as informações do aluno.");
         }
@@ -159,7 +164,11 @@ class AlunoController extends Aluno {
             // Define o ID do aluno no objeto criado, lendo o parâmetro "id" da URL
             // Isso é necessário para que o model saiba QUAL aluno deve ser atualizado no banco
             // Exemplo de URL: PUT /aluno/7  →  setIdAluno(7)
-            aluno.setIdAluno(parseInt(req.params.id as string));
+            const idAluno = parseInt(req.params.id as string);
+            if (isNaN(idAluno)) {
+                return res.status(400).json({ mensagem: "ID inválido." });
+            }
+            aluno.setIdAluno(idAluno);
 
             // Chama o método do model para atualizar os dados do aluno no banco de dados
             const result = await Aluno.atualizarAluno(aluno);
