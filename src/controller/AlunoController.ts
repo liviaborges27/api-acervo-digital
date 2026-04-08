@@ -93,11 +93,19 @@ class AlunoController extends Aluno {
         const { nome, sobrenome, data_nascimento, endereco, email, celular }: AlunoDTO = req.body;
 
         // 2. Validação de Campos Obrigatórios: Importante para evitar erros de "null constraint" no banco.
-        if (!nome || !sobrenome) {
+        if (!email) {
             return res.status(400).json({ 
-                mensagem: "Campos obrigatórios (nome e sobrenome) não foram preenchidos." 
+                mensagem: "O campo e-mail é obrigatório." 
+
             });
         }
+
+         if (!email.endsWith('@adigital.com.br')) {
+            return res.status(400).json({ 
+                mensagem: "Domínio inválido. O e-mail deve ser @adigital.com.br" 
+            });
+        }
+
 
         // 3. Instanciação com Valores Padrão: 
         // Usamos uma abordagem limpa para tratar valores opcionais.
